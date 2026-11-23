@@ -1,0 +1,6 @@
+{
+  "name": "VisionQR Guard",
+  "description": "Intelligent QR label, OCR text verification, and visual appearance inspection platform for automated quality control.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
