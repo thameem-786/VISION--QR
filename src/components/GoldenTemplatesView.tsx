@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Check, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { GoldenTemplate } from '../types/vision.ts';
 import {
@@ -7,15 +8,18 @@ import {
   generateSampleLabelDataUrl,
   scanDataUrlForQr,
 } from '../utils/qrScanner.ts';
+import { BUTTON_SPRING_PROPS, SPRING_PANEL } from '../utils/motionPresets.ts';
 
 interface GoldenTemplatesViewProps {
   templates: GoldenTemplate[];
+  onTemplatesChange?: (updater: (prev: GoldenTemplate[]) => GoldenTemplate[]) => void;
   onRefresh: () => Promise<void>;
   onNotify: (message: string, tone?: 'info' | 'error') => void;
 }
 
 export function GoldenTemplatesView({
   templates,
+  onTemplatesChange,
   onRefresh,
   onNotify,
 }: GoldenTemplatesViewProps) {
@@ -151,6 +155,18 @@ export function GoldenTemplatesView({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save template.');
+      const savedTpl = data.template as GoldenTemplate | undefined;
+      if (savedTpl && onTemplatesChange) {
+        onTemplatesChange((prev) => {
+          const base = savedTpl.isActive
+            ? prev.map((item) => ({ ...item, isActive: false }))
+            : prev;
+          const exists = base.some((item) => item.id === savedTpl.id);
+          return exists
+            ? base.map((item) => (item.id === savedTpl.id ? savedTpl : item))
+            : [savedTpl, ...base];
+        });
+      }
       await onRefresh();
       onNotify(editingId ? 'Golden template updated.' : 'Golden template saved.');
       resetForm();
@@ -165,6 +181,11 @@ export function GoldenTemplatesView({
     try {
       const res = await fetch(`/api/templates/${id}/activate`, { method: 'POST' });
       if (!res.ok) throw new Error('Failed to activate template.');
+      if (onTemplatesChange) {
+        onTemplatesChange((prev) =>
+          prev.map((item) => ({ ...item, isActive: item.id === id }))
+        );
+      }
       await onRefresh();
       onNotify('Active golden template updated.');
     } catch (err) {
@@ -177,6 +198,9 @@ export function GoldenTemplatesView({
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete template.');
       if (editingId === id) resetForm();
+      if (onTemplatesChange) {
+        onTemplatesChange((prev) => prev.filter((item) => item.id !== id));
+      }
       await onRefresh();
       onNotify('Template deleted.');
     } catch (err) {
@@ -187,120 +211,143 @@ export function GoldenTemplatesView({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
       {/* Left: Saved Golden Templates */}
-      <section className="lg:col-span-7 rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={SPRING_PANEL}
+        className="glass-panel lg:col-span-7 rounded-xl overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-950/12 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Golden Sample Templates</h2>
+            <h2 className="text-base font-bold text-[#0b1736]">Golden Sample Templates</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Reference standards used for QR matching, OCR validation, and visual similarity
             </p>
           </div>
-          <button
+          <motion.button
             type="button"
+            {...BUTTON_SPRING_PROPS}
             onClick={handleLoadStarterTemplate}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+            className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
           >
             <Plus className="h-3.5 w-3.5" />
             Load Starter Sample
-          </button>
+          </motion.button>
         </div>
 
         {templates.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="text-sm font-medium text-slate-900">No golden templates defined</p>
+            <p className="text-sm font-medium text-[#0b1736]">No golden templates defined</p>
             <p className="mt-1 text-xs text-slate-500">
               Create a golden reference template on the right or load the starter industrial sample
               to enable template comparison.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
-            {templates.map((tpl) => (
-              <div
-                key={tpl.id}
-                className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="flex gap-4 min-w-0">
-                  <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
-                    {tpl.referenceImageData ? (
-                      <img
-                        src={tpl.referenceImageData}
-                        alt={tpl.name}
-                        referrerPolicy="no-referrer"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-[11px] text-slate-400">No img</span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold text-slate-900">{tpl.name}</h3>
-                      {tpl.isActive && (
-                        <span className="font-mono text-xs font-semibold text-emerald-700">
-                          ACTIVE
-                        </span>
+          <div className="divide-y divide-blue-950/10">
+            <AnimatePresence initial={false}>
+              {templates.map((tpl, idx) => (
+                <motion.div
+                  key={tpl.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, delay: idx * 0.03 }}
+                  className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="flex gap-4 min-w-0">
+                    <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-blue-950/15 bg-white flex items-center justify-center">
+                      {tpl.referenceImageData ? (
+                        <img
+                          src={tpl.referenceImageData}
+                          alt={tpl.name}
+                          referrerPolicy="no-referrer"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[11px] text-slate-400">No img</span>
                       )}
                     </div>
-                    <p className="mt-0.5 font-mono text-xs text-slate-500 tabular-nums">
-                      SKU: {tpl.sku} · Min Score: {tpl.minSimilarityScore}%
-                      {tpl.expectedQrPattern ? ` · QR: ${tpl.expectedQrPattern}` : ''}
-                    </p>
-                    {tpl.expectedOcrText && (
-                      <p className="mt-1.5 line-clamp-2 text-xs text-slate-600">
-                        OCR: {tpl.expectedOcrText.replace(/\n/g, ' · ')}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-sm font-bold text-[#0b1736]">{tpl.name}</h3>
+                        {tpl.isActive && (
+                          <span className="font-mono text-xs font-semibold text-emerald-700">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 font-mono text-xs text-slate-500 tabular-nums">
+                        SKU: {tpl.sku} · Similarity Threshold: {tpl.minSimilarityScore}%
+                        {tpl.expectedQrPattern ? ` · QR: ${tpl.expectedQrPattern}` : ''}
                       </p>
-                    )}
+                      {tpl.expectedOcrText && (
+                        <p className="mt-1.5 line-clamp-2 text-xs text-slate-600">
+                          OCR: {tpl.expectedOcrText.replace(/\n/g, ' · ')}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {!tpl.isActive && (
-                    <button
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!tpl.isActive && (
+                      <motion.button
+                        type="button"
+                        {...BUTTON_SPRING_PROPS}
+                        onClick={() => handleActivate(tpl.id)}
+                        className="white-glass-btn inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Set Active
+                      </motion.button>
+                    )}
+                    <motion.button
                       type="button"
-                      onClick={() => handleActivate(tpl.id)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+                      {...BUTTON_SPRING_PROPS}
+                      onClick={() => loadForEdit(tpl)}
+                      className="white-glass-btn rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap"
                     >
-                      <Check className="h-3.5 w-3.5" />
-                      Set Active
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => loadForEdit(tpl)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(tpl.id)}
-                    aria-label={`Delete ${tpl.name}`}
-                    className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+                      Edit
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      {...BUTTON_SPRING_PROPS}
+                      onClick={() => handleDelete(tpl.id)}
+                      aria-label={`Delete ${tpl.name}`}
+                      className="white-glass-btn inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 whitespace-nowrap"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </motion.button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* Right: Create / Edit Template Form */}
-      <section className="lg:col-span-5 rounded-xl border border-slate-200 bg-white p-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h2 className="text-base font-semibold text-slate-900">
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...SPRING_PANEL, delay: 0.05 }}
+        className="glass-panel lg:col-span-5 rounded-xl p-6"
+      >
+        <div className="flex items-center justify-between border-b border-blue-950/12 pb-4">
+          <h2 className="text-base font-bold text-[#0b1736]">
             {editingId ? 'Edit Golden Template' : 'New Golden Template'}
           </h2>
           {editingId && (
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={resetForm}
-              className="text-xs font-medium text-slate-600 hover:text-slate-900"
+              className="text-xs font-medium text-slate-600 hover:text-[#0b1736]"
             >
               Cancel Edit
-            </button>
+            </motion.button>
           )}
         </div>
 
@@ -349,18 +396,22 @@ export function GoldenTemplatesView({
               <label className="block text-xs font-medium text-slate-700">
                 Golden Reference Image
               </label>
-              <button
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 disabled={!referenceImageData || extracting}
                 onClick={handleExtractFromReference}
-                className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800 disabled:opacity-40"
+                className="inline-flex items-center gap-1 text-xs font-medium text-blue-900 hover:text-blue-700 disabled:opacity-40"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 {extracting ? 'Extracting...' : 'Auto-Extract OCR'}
-              </button>
+              </motion.button>
             </div>
             <div className="mt-1.5 flex items-center gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 whitespace-nowrap">
+              <motion.label
+                {...BUTTON_SPRING_PROPS}
+                className="white-glass-btn inline-flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
+              >
                 <Upload className="h-3.5 w-3.5" />
                 Upload Golden Image
                 <input
@@ -369,19 +420,20 @@ export function GoldenTemplatesView({
                   onChange={handleUploadReference}
                   className="hidden"
                 />
-              </label>
+              </motion.label>
               {referenceImageData && (
-                <button
+                <motion.button
                   type="button"
+                  {...BUTTON_SPRING_PROPS}
                   onClick={() => setReferenceImageData(null)}
                   className="text-xs text-slate-500 hover:text-red-700"
                 >
                   Remove image
-                </button>
+                </motion.button>
               )}
             </div>
             {referenceImageData && (
-              <div className="mt-2 aspect-[16/9] overflow-hidden rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
+              <div className="mt-2 aspect-[16/9] overflow-hidden rounded-lg border border-blue-950/15 bg-white flex items-center justify-center">
                 <img
                   src={referenceImageData}
                   alt="Golden sample preview"
@@ -401,7 +453,7 @@ export function GoldenTemplatesView({
               value={expectedOcrText}
               onChange={(e) => setExpectedOcrText(e.target.value)}
               placeholder="Enter required printed text lines..."
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-slate-900"
+              className="mt-1 w-full rounded-lg border border-blue-950/15 bg-white/90 px-3 py-2 font-mono text-xs text-[#0b1736] outline-none focus:border-blue-800"
             />
           </div>
 
@@ -413,7 +465,7 @@ export function GoldenTemplatesView({
               rows={2}
               value={appearanceCriteria}
               onChange={(e) => setAppearanceCriteria(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-slate-900"
+              className="mt-1 w-full rounded-lg border border-blue-950/15 bg-white/90 px-3 py-2 text-xs text-[#0b1736] outline-none focus:border-blue-800"
             />
           </div>
 
@@ -428,7 +480,7 @@ export function GoldenTemplatesView({
                 max={98}
                 value={minSimilarityScore}
                 onChange={(e) => setMinSimilarityScore(Number(e.target.value))}
-                className="mt-1.5 w-full accent-slate-900"
+                className="mt-1.5 w-full accent-[#0b1736]"
               />
             </div>
 
@@ -437,21 +489,22 @@ export function GoldenTemplatesView({
                 type="checkbox"
                 checked={isActive}
                 onChange={(e) => setIsActive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                className="h-4 w-4 rounded border-blue-950/25 accent-[#0b1736]"
               />
               Set as Active
             </label>
           </div>
 
-          <button
+          <motion.button
             type="submit"
+            {...BUTTON_SPRING_PROPS}
             disabled={saving}
-            className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+            className="navy-glass-btn w-full rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
             {saving ? 'Saving Template...' : editingId ? 'Update Golden Template' : 'Save Golden Template'}
-          </button>
+          </motion.button>
         </form>
-      </section>
+      </motion.section>
     </div>
   );
 }

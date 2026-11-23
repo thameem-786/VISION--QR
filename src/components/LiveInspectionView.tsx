@@ -8,11 +8,11 @@ import {
   FileSpreadsheet,
   Layers,
   Play,
+  RotateCcw,
   ScanLine,
   Upload,
   XCircle,
 } from 'lucide-react';
-import { BubbleField } from './BubbleField.tsx';
 import type {
   GoldenTemplate,
   InspectionRecord,
@@ -26,6 +26,7 @@ import {
   scanImageDataForQr,
 } from '../utils/qrScanner.ts';
 import type { QrScanResult, SampleLabelVariant } from '../utils/qrScanner.ts';
+import { BUTTON_SPRING_PROPS, SPRING_PANEL } from '../utils/motionPresets.ts';
 
 interface BatchItem {
   id: string;
@@ -438,39 +439,113 @@ export function LiveInspectionView({
     onNotify(`Batch finished: ${okCount} OK, ${ngCount} NG.`);
   };
 
+  const handleResetInspection = useCallback(() => {
+    stopCamera();
+    setPreviewImageUrl(null);
+    setCameraError(null);
+    setLiveQr({ detected: false, payload: '', location: null });
+    setLatestResult(null);
+  }, [stopCamera]);
+
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
+
+  const resultTemplate = latestResult?.templateId
+    ? templates.find((t) => t.id === latestResult.templateId) ?? null
+    : null;
+
+  const verificationBreakdown: Array<{
+    label: string;
+    status: 'Pass' | 'Fail' | 'Not Implemented';
+    detail: string;
+  }> = latestResult
+    ? [
+        {
+          label: 'QR Presence',
+          status: latestResult.qrDetected ? 'Pass' : 'Fail',
+          detail: latestResult.qrDetected
+            ? 'QR matrix located in captured label'
+            : 'No QR matrix detected in frame',
+        },
+        {
+          label: 'QR Readability',
+          status:
+            latestResult.qrDetected && latestResult.qrPayload.trim().length > 0 ? 'Pass' : 'Fail',
+          detail:
+            latestResult.qrDetected && latestResult.qrPayload.trim().length > 0
+              ? latestResult.qrPayload
+              : 'QR payload could not be decoded',
+        },
+        {
+          label: 'QR Format Validation',
+          status: !latestResult.qrDetected
+            ? 'Fail'
+            : resultTemplate?.expectedQrPattern.trim()
+              ? latestResult.qrMatch
+                ? 'Pass'
+                : 'Fail'
+              : 'Not Implemented',
+          detail: !latestResult.qrDetected
+            ? 'Requires a decoded QR payload'
+            : resultTemplate?.expectedQrPattern.trim()
+              ? latestResult.qrNote
+              : 'No expected QR pattern configured on template',
+        },
+        {
+          label: 'OCR Text Matching',
+          status: resultTemplate?.expectedOcrText.trim()
+            ? latestResult.ocrMatch
+              ? 'Pass'
+              : 'Fail'
+            : latestResult.ocrMatch
+              ? 'Not Implemented'
+              : 'Fail',
+          detail: resultTemplate?.expectedOcrText.trim()
+            ? latestResult.ocrMatch
+              ? 'All required OCR lines matched'
+              : `Mismatch / Missing: ${latestResult.ocrMissingItems.join(', ') || 'Text discrepancy'}`
+            : 'No reference OCR text configured (extracted text shown below)',
+        },
+        {
+          label: 'Appearance Verification',
+          status: latestResult.appearancePass ? 'Pass' : 'Fail',
+          detail: `${latestResult.appearanceScore}/100 visual quality score`,
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-5">
       {/* Toolbar: Mode Switcher + Golden Template Selector */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-5 py-3.5">
+      <div className="glass-panel flex flex-wrap items-center justify-between gap-4 rounded-xl px-5 py-3.5">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
-            <button
+          <div className="flex items-center gap-1 rounded-lg bg-blue-950/[0.06] p-1">
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => setMode('single')}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                 mode === 'single'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'navy-glass-btn text-white'
+                  : 'text-slate-700 hover:text-blue-900'
               }`}
             >
               Single / Webcam
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => {
                 stopCamera();
                 setMode('batch');
               }}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                 mode === 'batch'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'navy-glass-btn text-white'
+                  : 'text-slate-700 hover:text-blue-900'
               }`}
             >
               Batch Upload
-            </button>
+            </motion.button>
           </div>
 
           <label className="hidden sm:flex items-center gap-2 text-xs text-slate-600 whitespace-nowrap">
@@ -478,7 +553,7 @@ export function LiveInspectionView({
               type="checkbox"
               checked={autoTriggerEnabled}
               onChange={(e) => setAutoTriggerEnabled(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-slate-300 accent-slate-900"
+              className="h-3.5 w-3.5 rounded border-blue-950/25 accent-[#0b1736]"
             />
             Auto-inspect on ESP32 trigger
           </label>
@@ -491,7 +566,7 @@ export function LiveInspectionView({
           <select
             value={selectedTemplateId}
             onChange={(e) => setSelectedTemplateId(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-slate-900"
+            className="rounded-lg border border-blue-950/15 bg-white/90 px-3 py-1.5 text-xs font-medium text-[#0b1736] outline-none focus:border-blue-800"
           >
             <option value="">Ad-hoc (No Template)</option>
             {templates.map((t) => (
@@ -501,52 +576,66 @@ export function LiveInspectionView({
             ))}
           </select>
           {templates.length === 0 && (
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => onNavigate('templates')}
-              className="text-xs font-medium text-blue-700 hover:underline whitespace-nowrap"
+              className="text-xs font-medium text-blue-900 hover:underline whitespace-nowrap"
             >
               Create Template
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
 
+      <AnimatePresence mode="wait">
       {mode === 'single' ? (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+        <motion.div
+          key="single-mode"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={SPRING_PANEL}
+          className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start"
+        >
           {/* Left: Camera / Image Viewport */}
-          <section className="lg:col-span-7 rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+          <section className="glass-panel lg:col-span-7 rounded-xl p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">Optical Capture Viewport</h2>
+                <h2 className="text-sm font-bold text-[#0b1736]">Optical Capture Viewport</h2>
                 <p className="text-xs text-slate-500">
                   {selectedTemplate
                     ? `Comparing against ${selectedTemplate.name} (Min score ${selectedTemplate.minSimilarityScore}%)`
                     : 'Running standalone QR, OCR, and defect verification'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {!cameraActive ? (
-                  <button
+                  <motion.button
                     type="button"
+                    {...BUTTON_SPRING_PROPS}
                     onClick={startCamera}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+                    className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
                   >
                     <Camera className="h-3.5 w-3.5" />
                     Start Camera
-                  </button>
+                  </motion.button>
                 ) : (
-                  <button
+                  <motion.button
                     type="button"
+                    {...BUTTON_SPRING_PROPS}
                     onClick={stopCamera}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 whitespace-nowrap"
+                    className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 whitespace-nowrap"
                   >
                     <CameraOff className="h-3.5 w-3.5" />
                     Stop Camera
-                  </button>
+                  </motion.button>
                 )}
 
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap">
+                <motion.label
+                  {...BUTTON_SPRING_PROPS}
+                  className="white-glass-btn inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
+                >
                   <Upload className="h-3.5 w-3.5" />
                   Upload Image
                   <input
@@ -555,7 +644,18 @@ export function LiveInspectionView({
                     onChange={handleUploadSingle}
                     className="hidden"
                   />
-                </label>
+                </motion.label>
+
+                <motion.button
+                  type="button"
+                  {...BUTTON_SPRING_PROPS}
+                  disabled={inspecting}
+                  onClick={handleResetInspection}
+                  className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-45 whitespace-nowrap"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset Inspection
+                </motion.button>
               </div>
             </div>
 
@@ -566,7 +666,7 @@ export function LiveInspectionView({
             )}
 
             {/* Viewport Frame */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-950 flex items-center justify-center">
+            <div className="glass-dark-terminal relative aspect-[16/10] w-full overflow-hidden rounded-lg flex items-center justify-center">
               <video
                 ref={videoRef}
                 muted
@@ -585,36 +685,32 @@ export function LiveInspectionView({
                   src={previewImageUrl}
                   alt="Loaded inspection label"
                   referrerPolicy="no-referrer"
-                  className="h-full w-full object-contain bg-slate-100"
+                  className="h-full w-full object-contain bg-white/90"
                 />
               )}
 
               {!cameraActive && !previewImageUrl && (
-                <>
-                  <BubbleField variant="terminal" tone="blue" count={12} />
-                  <div className="relative z-10 flex flex-col items-center justify-center px-6 text-center text-slate-400">
-                    <ScanLine className="h-9 w-9 text-slate-500" />
-                    <p className="mt-3 text-sm font-medium text-slate-200">
-                      Camera idle · No label frame loaded
-                    </p>
-                    <p className="mt-1 max-w-sm text-xs text-slate-400">
-                      Start a USB/webcam feed, upload a label photo, or generate a synthetic test label
-                      below.
-                    </p>
-                  </div>
-                </>
+                <div className="relative z-10 flex flex-col items-center justify-center px-6 text-center text-sky-200/80">
+                  <ScanLine className="h-9 w-9 text-sky-400" />
+                  <p className="mt-3 text-sm font-medium text-white">
+                    Camera idle · No label frame loaded
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs text-sky-200/75">
+                    Start a USB/webcam feed, upload a label photo, or generate a synthetic test label
+                    below.
+                  </p>
+                </div>
               )}
 
               {inspecting && (
-                <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
-                  <BubbleField variant="burst" tone="blue" count={10} />
-                  <div className="scan-sweep-anim h-1 w-full bg-gradient-to-r from-transparent via-sky-400 to-transparent shadow-[0_0_18px_rgba(56,189,248,0.85)]" />
+                <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden bg-blue-950/20 backdrop-blur-[1px]">
+                  <div className="scan-sweep-anim h-1 w-full bg-gradient-to-r from-transparent via-sky-400 to-transparent shadow-[0_0_20px_rgba(56,189,248,0.95)]" />
                 </div>
               )}
             </div>
 
             {/* Live QR Bar + Inspect Button */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-blue-950/12 pt-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium text-slate-500">Live QR Matrix Read</p>
                 <p
@@ -627,11 +723,10 @@ export function LiveInspectionView({
               </div>
               <motion.button
                 type="button"
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.97 }}
+                {...BUTTON_SPRING_PROPS}
                 disabled={inspecting || (!cameraActive && !previewImageUrl)}
                 onClick={handleInspectCurrentFrame}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-45 whitespace-nowrap"
+                className="navy-glass-btn inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-medium disabled:opacity-45 whitespace-nowrap"
               >
                 <Play className="h-3.5 w-3.5" />
                 {inspecting ? 'Inspecting Frame...' : 'Inspect Frame'}
@@ -639,7 +734,7 @@ export function LiveInspectionView({
             </div>
 
             {/* Synthetic Test Sample Generator */}
-            <div className="border-t border-slate-100 pt-3">
+            <div className="border-t border-blue-950/12 pt-3">
               <p className="text-xs font-medium text-slate-600">
                 Benchtop Test Samples (Real Scannable QR Labels)
               </p>
@@ -652,23 +747,24 @@ export function LiveInspectionView({
                     ['damaged_qr', 'Damaged QR Scratch'],
                   ] as Array<[SampleLabelVariant, string]>
                 ).map(([variant, label]) => (
-                  <button
+                  <motion.button
                     key={variant}
                     type="button"
+                    {...BUTTON_SPRING_PROPS}
                     onClick={() => handleLoadSyntheticSample(variant)}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 whitespace-nowrap"
+                    className="white-glass-btn rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap"
                   >
                     {label}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
           </section>
 
           {/* Right: Verdict & Analysis */}
-          <section className="lg:col-span-5 rounded-xl border border-slate-200 bg-white p-5 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-sm font-semibold text-slate-900">Verification Result</h2>
+          <section className="glass-panel lg:col-span-5 rounded-xl p-5 space-y-5">
+            <div className="flex items-center justify-between border-b border-blue-950/12 pb-3">
+              <h2 className="text-sm font-bold text-[#0b1736]">Verification Result</h2>
               {latestResult && (
                 <span className="font-mono text-xs text-slate-500 tabular-nums">
                   {latestResult.cycleTimeMs} ms
@@ -678,9 +774,9 @@ export function LiveInspectionView({
 
             {inspecting ? (
               <div className="space-y-4 py-6">
-                <div className="h-14 w-full animate-pulse rounded-lg bg-slate-100" />
-                <div className="h-20 w-full animate-pulse rounded-lg bg-slate-100" />
-                <div className="h-24 w-full animate-pulse rounded-lg bg-slate-100" />
+                <div className="h-14 w-full animate-pulse rounded-lg bg-blue-950/10" />
+                <div className="h-20 w-full animate-pulse rounded-lg bg-blue-950/10" />
+                <div className="h-24 w-full animate-pulse rounded-lg bg-blue-950/10" />
               </div>
             ) : !latestResult ? (
               <div className="py-12 text-center">
@@ -702,23 +798,18 @@ export function LiveInspectionView({
                 >
                   {/* Verdict Banner */}
                   <div
-                    className={`relative overflow-hidden flex items-start gap-3 rounded-lg border px-4 py-3 ${
+                    className={`flex items-start gap-3 rounded-lg border px-4 py-3 backdrop-blur-md ${
                       latestResult.verdict === 'OK'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
-                        : 'border-red-200 bg-red-50 text-red-950'
+                        ? 'border-emerald-200 bg-emerald-50/90 text-emerald-950'
+                        : 'border-red-200 bg-red-50/90 text-red-950'
                     }`}
                   >
-                    <BubbleField
-                      variant="burst"
-                      tone={latestResult.verdict === 'OK' ? 'emerald' : 'crimson'}
-                      count={10}
-                    />
                     {latestResult.verdict === 'OK' ? (
-                      <CheckCircle2 className="relative z-10 mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
                     ) : (
-                      <XCircle className="relative z-10 mt-0.5 h-5 w-5 shrink-0 text-red-700" />
+                      <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-700" />
                     )}
-                    <div className="relative z-10 min-w-0">
+                    <div className="min-w-0">
                       <p className="font-mono text-sm font-semibold">
                         VERDICT: {latestResult.verdict === 'OK' ? 'OK — ACCEPTED' : 'NG — REJECTED'}
                       </p>
@@ -728,113 +819,120 @@ export function LiveInspectionView({
                     </div>
                   </div>
 
-                {/* 3 Check Breakdown */}
-                <div className="divide-y divide-slate-200 rounded-lg border border-slate-200">
-                  <div className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-900">1. QR Payload Check</span>
-                      <span
-                        className={`font-mono text-xs font-semibold ${
-                          latestResult.qrMatch ? 'text-emerald-700' : 'text-red-700'
-                        }`}
-                      >
-                        {latestResult.qrMatch ? 'PASS' : 'FAIL'}
-                      </span>
-                    </div>
-                    <p className="mt-1 font-mono text-xs text-slate-700 break-all">
-                      {latestResult.qrDetected ? latestResult.qrPayload : 'No QR decoded'}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">{latestResult.qrNote}</p>
+                  {/* 5-Check Breakdown List */}
+                  <div className="divide-y divide-blue-950/10 rounded-lg border border-blue-950/15 bg-white/75">
+                    {verificationBreakdown.map((item) => (
+                      <div key={item.label} className="flex items-start justify-between gap-3 px-3.5 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-[#0b1736]">{item.label}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-500">{item.detail}</p>
+                        </div>
+                        <span
+                          className={`shrink-0 font-mono text-xs font-semibold whitespace-nowrap ${
+                            item.status === 'Pass'
+                              ? 'text-emerald-700'
+                              : item.status === 'Fail'
+                                ? 'text-red-700'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-900">2. OCR Text Match</span>
-                      <span
-                        className={`font-mono text-xs font-semibold ${
-                          latestResult.ocrMatch ? 'text-emerald-700' : 'text-red-700'
-                        }`}
-                      >
-                        {latestResult.ocrMatch ? 'PASS' : 'FAIL'}
-                      </span>
+                  {/* Extracted OCR & Defect Details */}
+                  <div className="divide-y divide-blue-950/10 rounded-lg border border-blue-950/15 bg-white/60">
+                    <div className="p-3.5">
+                      <p className="text-xs font-semibold text-[#0b1736]">Extracted OCR Text</p>
+                      <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap rounded border border-blue-950/10 bg-white/90 p-2 font-mono text-[11px] text-slate-700">
+                        {latestResult.ocrExtractedText || 'No text extracted'}
+                      </pre>
+                      {latestResult.ocrMissingItems.length > 0 && (
+                        <p className="mt-1 text-xs text-red-700">
+                          Mismatch / Missing: {latestResult.ocrMissingItems.join(', ')}
+                        </p>
+                      )}
                     </div>
-                    <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-slate-50 p-2 font-mono text-[11px] text-slate-700">
-                      {latestResult.ocrExtractedText || 'No text extracted'}
-                    </pre>
-                    {latestResult.ocrMissingItems.length > 0 && (
-                      <p className="mt-1 text-xs text-red-700">
-                        Mismatch / Missing: {latestResult.ocrMissingItems.join(', ')}
-                      </p>
-                    )}
-                  </div>
 
-                  <div className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-900">
-                        3. Appearance & Golden Check
-                      </span>
-                      <span
-                        className={`font-mono text-xs font-semibold tabular-nums ${
-                          latestResult.appearancePass ? 'text-emerald-700' : 'text-red-700'
-                        }`}
-                      >
-                        {latestResult.appearanceScore}/100 ·{' '}
-                        {latestResult.appearancePass ? 'PASS' : 'FAIL'}
-                      </span>
+                    <div className="p-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-[#0b1736]">
+                          Visual Appearance Score
+                        </span>
+                        <span
+                          className={`font-mono text-xs font-semibold tabular-nums ${
+                            latestResult.appearancePass ? 'text-emerald-700' : 'text-red-700'
+                          }`}
+                        >
+                          {latestResult.appearanceScore}/100
+                        </span>
+                      </div>
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-blue-950/10">
+                        <div
+                          className={`h-full transition-all ${
+                            latestResult.appearancePass ? 'bg-emerald-600' : 'bg-red-600'
+                          }`}
+                          style={{ width: `${latestResult.appearanceScore}%` }}
+                        />
+                      </div>
+                      {latestResult.defects.length > 0 ? (
+                        <ul className="mt-2.5 space-y-1.5">
+                          {latestResult.defects.map((d, i) => (
+                            <li key={i} className="text-xs text-slate-700">
+                              <span className="font-mono font-semibold text-red-700 uppercase">
+                                [{d.severity}]
+                              </span>{' '}
+                              <span className="font-medium">{d.type}</span> ({d.location}):{' '}
+                              {d.description}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">
+                          No visual print or surface defects observed.
+                        </p>
+                      )}
                     </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full transition-all ${
-                          latestResult.appearancePass ? 'bg-emerald-600' : 'bg-red-600'
-                        }`}
-                        style={{ width: `${latestResult.appearanceScore}%` }}
-                      />
-                    </div>
-                    {latestResult.defects.length > 0 ? (
-                      <ul className="mt-2.5 space-y-1.5">
-                        {latestResult.defects.map((d, i) => (
-                          <li key={i} className="text-xs text-slate-700">
-                            <span className="font-mono font-semibold text-red-700 uppercase">
-                              [{d.severity}]
-                            </span>{' '}
-                            <span className="font-medium">{d.type}</span> ({d.location}):{' '}
-                            {d.description}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-slate-500">
-                        No visual print or surface defects observed.
-                      </p>
-                    )}
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
               </AnimatePresence>
             )}
           </section>
-        </div>
+        </motion.div>
       ) : (
         /* Batch Upload Mode */
-        <section className="rounded-xl border border-slate-200 bg-white p-6 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <motion.section
+          key="batch-mode"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={SPRING_PANEL}
+          className="glass-panel rounded-xl p-6 space-y-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-blue-950/12 pb-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Batch Label Inspection</h2>
+              <h2 className="text-base font-bold text-[#0b1736]">Batch Label Inspection</h2>
               <p className="mt-0.5 text-xs text-slate-500">
                 Queue multiple label images, run sequential verification, and export a CSV QA report
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={handleLoadSampleBatch}
                 disabled={batchRunning}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-45 whitespace-nowrap"
+                className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-45 whitespace-nowrap"
               >
                 <Layers className="h-3.5 w-3.5" />
                 Load 4 Sample Labels
-              </button>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap">
+              </motion.button>
+              <motion.label
+                {...BUTTON_SPRING_PROPS}
+                className="white-glass-btn inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
+              >
                 <Upload className="h-3.5 w-3.5" />
                 Select Images
                 <input
@@ -844,29 +942,31 @@ export function LiveInspectionView({
                   onChange={handleBatchFiles}
                   className="hidden"
                 />
-              </label>
-              <a
+              </motion.label>
+              <motion.a
+                {...BUTTON_SPRING_PROPS}
                 href="/api/inspections/export/csv?source=batch"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+                className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 Export Batch CSV
-              </a>
-              <button
+              </motion.a>
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 disabled={batchRunning || batchItems.length === 0}
                 onClick={handleRunBatch}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-45 whitespace-nowrap"
+                className="navy-glass-btn inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium disabled:opacity-45 whitespace-nowrap"
               >
                 <Play className="h-3.5 w-3.5" />
                 {batchRunning ? 'Running Batch...' : 'Run Batch Inspection'}
-              </button>
+              </motion.button>
             </div>
           </div>
 
           {batchItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/70 py-14 text-center">
-              <p className="text-sm font-medium text-slate-900">Batch queue is empty</p>
+            <div className="rounded-lg border border-dashed border-blue-950/20 bg-white/60 py-14 text-center">
+              <p className="text-sm font-medium text-[#0b1736]">Batch queue is empty</p>
               <p className="mt-1 text-xs text-slate-500">
                 Select multiple label photos or click Load 4 Sample Labels to test mixed OK/NG batch
                 throughput.
@@ -876,7 +976,7 @@ export function LiveInspectionView({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-medium text-slate-500">
+                  <tr className="border-b border-blue-950/12 bg-blue-950/[0.04] text-xs font-medium text-slate-600">
                     <th className="px-4 py-2.5">Preview</th>
                     <th className="px-4 py-2.5">File</th>
                     <th className="px-4 py-2.5">QR Payload</th>
@@ -885,18 +985,24 @@ export function LiveInspectionView({
                     <th className="px-4 py-2.5 text-right">Status / Verdict</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {batchItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60">
+                <tbody className="divide-y divide-blue-950/10">
+                  {batchItems.map((item, idx) => (
+                    <motion.tr
+                      key={item.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.16, delay: idx * 0.025 }}
+                      className="hover:bg-white/75"
+                    >
                       <td className="px-4 py-2">
                         <img
                           src={item.dataUrl}
                           alt={item.name}
                           referrerPolicy="no-referrer"
-                          className="h-10 w-16 rounded border border-slate-200 bg-slate-100 object-contain"
+                          className="h-10 w-16 rounded border border-blue-950/15 bg-white object-contain"
                         />
                       </td>
-                      <td className="px-4 py-2 text-xs font-medium text-slate-900">
+                      <td className="px-4 py-2 text-xs font-medium text-[#0b1736]">
                         {item.name}
                         {item.record && (
                           <p className="mt-0.5 max-w-md truncate text-[11px] font-normal text-slate-500">
@@ -923,7 +1029,7 @@ export function LiveInspectionView({
                       <td className="px-4 py-2 text-right font-mono text-xs font-semibold">
                         {item.status === 'queued' && <span className="text-slate-500">QUEUED</span>}
                         {item.status === 'running' && (
-                          <span className="text-blue-700">INSPECTING...</span>
+                          <span className="text-blue-800">INSPECTING...</span>
                         )}
                         {item.status === 'error' && <span className="text-red-700">ERROR</span>}
                         {item.status === 'done' && item.record && (
@@ -936,14 +1042,15 @@ export function LiveInspectionView({
                           </span>
                         )}
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-        </section>
+        </motion.section>
       )}
+      </AnimatePresence>
     </div>
   );
 }

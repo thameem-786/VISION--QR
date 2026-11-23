@@ -92,7 +92,7 @@ export interface HardwareStatusResponse {
   rssi: number | null;
   pendingTriggerId: number;
   lastTriggerAt: string | null;
-  pendingCommand: 'OK' | 'NG' | 'IDLE';
+  pendingCommand: 'OK' | 'NG' | 'NONE' | 'IDLE';
   pendingCommandAt: string | null;
   events: HardwareEvent[];
 }

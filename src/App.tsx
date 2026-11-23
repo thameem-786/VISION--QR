@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { BubbleField } from './components/BubbleField.tsx';
 import { GoldenTemplatesView } from './components/GoldenTemplatesView.tsx';
 import { HardwareStatusView } from './components/HardwareStatusView.tsx';
 import { InspectionDetailDrawer } from './components/InspectionDetailDrawer.tsx';
@@ -26,6 +25,12 @@ import type {
 } from './types/vision.ts';
 import { connectEsp32Serial } from './utils/esp32Serial.ts';
 import type { Esp32SerialConnection } from './utils/esp32Serial.ts';
+import {
+  BUTTON_SPRING_PROPS,
+  NAV_SPRING_PROPS,
+  SPRING_INTERACTIVE,
+  SPRING_PANEL,
+} from './utils/motionPresets.ts';
 
 const EMPTY_METRICS: MetricsSummary = {
   totalInspections: 0,
@@ -290,6 +295,17 @@ export default function App() {
     }
   };
 
+  const handleClearHardwareEvents = async () => {
+    try {
+      const res = await fetch('/api/hardware/events', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to clear hardware event log.');
+      await refreshAllData();
+      notify('Hardware event log cleared.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Clear failed.', 'error');
+    }
+  };
+
   const esp32Label = serialConnected
     ? 'Serial'
     : hardwareStatus?.httpConnected
@@ -297,116 +313,132 @@ export default function App() {
       : 'Off';
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <div className="navy-white-canvas flex min-h-screen text-[#0b1736]">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white">
-        <div className="flex h-16 items-center gap-3 border-b border-slate-200 px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
+      <aside className="glass-navy-sidebar hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col text-white">
+        <div className="navy-accent-bar h-[3px] w-full shrink-0" />
+        <div className="flex h-16 items-center gap-3 border-b border-white/15 px-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/25 bg-white/15 text-white shadow-sm backdrop-blur-md">
             <QrCode className="h-4 w-4" />
           </div>
-          <span className="font-display text-base font-bold tracking-tight text-slate-900 whitespace-nowrap">
+          <span className="font-display text-lg font-bold tracking-tight text-white whitespace-nowrap">
             VisionQR Guard
           </span>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-5" aria-label="Workspace navigation">
+        <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Workspace navigation">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
             return (
-              <button
+              <motion.button
                 key={item.id}
                 type="button"
+                {...NAV_SPRING_PROPS}
                 onClick={() => setActiveTab(item.id)}
                 className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors whitespace-nowrap ${
                   active
                     ? 'text-white'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 {active && (
                   <motion.span
                     layoutId="active-nav-bg"
-                    transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                    className="absolute inset-0 rounded-lg bg-slate-900"
+                    transition={SPRING_INTERACTIVE}
+                    className="absolute inset-0 rounded-lg border border-white/25 bg-white/15 backdrop-blur-md shadow-sm"
                   />
                 )}
                 <Icon className="relative z-10 h-4 w-4 shrink-0" />
                 <span className="relative z-10">{item.label}</span>
-              </button>
+              </motion.button>
             );
           })}
         </nav>
-
-        <div className="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
-          Team Phoenix · PS-017
-        </div>
       </aside>
 
       {/* Mobile Navigation Drawer */}
-      {mobileNavOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="fixed inset-0 bg-slate-900/40" onClick={() => setMobileNavOpen(false)} />
-          <aside className="relative flex w-64 flex-col bg-white border-r border-slate-200">
-            <div className="flex h-16 items-center justify-between border-b border-slate-200 px-5">
-              <span className="font-display text-base font-bold text-slate-900">
-                VisionQR Guard
-              </span>
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(false)}
-                aria-label="Close navigation"
-                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <nav className="flex-1 space-y-1 px-3 py-4">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setMobileNavOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                      active
-                        ? 'bg-slate-900 text-white'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-            <div className="border-t border-slate-200 px-5 py-4 text-xs text-slate-500">
-              Team Phoenix · PS-017
-            </div>
-          </aside>
-        </div>
-      )}
+      <AnimatePresence>
+        {mobileNavOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="fixed inset-0 z-50 flex lg:hidden"
+          >
+            <div
+              className="fixed inset-0 bg-[#0b1736]/45 backdrop-blur-xs"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+              className="glass-navy-sidebar relative flex w-64 flex-col text-white"
+            >
+              <div className="navy-accent-bar h-[3px] w-full shrink-0" />
+              <div className="flex h-16 items-center justify-between border-b border-white/15 px-5">
+                <span className="font-display text-lg font-bold text-white">
+                  VisionQR Guard
+                </span>
+                <motion.button
+                  type="button"
+                  {...BUTTON_SPRING_PROPS}
+                  onClick={() => setMobileNavOpen(false)}
+                  aria-label="Close navigation"
+                  className="rounded-lg p-1.5 text-blue-100 hover:bg-white/15 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </motion.button>
+              </div>
+              <nav className="flex-1 space-y-1.5 px-3 py-4">
+                {NAV_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <motion.button
+                      key={item.id}
+                      type="button"
+                      {...NAV_SPRING_PROPS}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setMobileNavOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                        active
+                          ? 'border border-white/25 bg-white/15 text-white backdrop-blur-md shadow-sm'
+                          : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </motion.button>
+                  );
+                })}
+              </nav>
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Workspace */}
-      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <BubbleField variant="ambient" tone="blue" count={14} className="opacity-70" />
-        <header className="relative z-10 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 backdrop-blur-xs sm:px-8">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="navy-accent-bar h-[3px] w-full shrink-0" />
+        <header className="glass-header relative z-10 flex h-16 items-center justify-between gap-4 px-4 sm:px-8">
           <div className="flex items-center gap-3 min-w-0">
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => setMobileNavOpen(true)}
               aria-label="Open navigation"
-              className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"
+              className="white-glass-btn rounded-lg p-2 lg:hidden"
             >
               <Menu className="h-4 w-4" />
-            </button>
+            </motion.button>
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold text-slate-900 sm:text-lg">
+              <h1 className="truncate font-display text-lg font-bold text-[#0b1736] sm:text-xl">
                 {VIEW_TITLES[activeTab]}
               </h1>
             </div>
@@ -416,29 +448,30 @@ export default function App() {
             <div className="hidden md:flex items-center gap-3 font-mono text-xs text-slate-600">
               <span>
                 Camera:{' '}
-                <strong className={cameraActive ? 'text-emerald-700' : 'text-slate-900'}>
+                <strong className={cameraActive ? 'text-emerald-700' : 'text-[#0b1736]'}>
                   {cameraActive ? 'Live' : 'Off'}
                 </strong>
               </span>
-              <span aria-hidden="true" className="text-slate-300">
+              <span aria-hidden="true" className="text-blue-900/25">
                 /
               </span>
               <span>
                 ESP32:{' '}
-                <strong className={esp32Label === 'Off' ? 'text-slate-900' : 'text-emerald-700'}>
+                <strong className={esp32Label === 'Off' ? 'text-[#0b1736]' : 'text-emerald-700'}>
                   {esp32Label}
                 </strong>
               </span>
             </div>
 
             {activeTab !== 'live' && (
-              <button
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={() => setActiveTab('live')}
-                className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800 whitespace-nowrap"
+                className="navy-glass-btn rounded-lg px-3.5 py-2 text-xs font-medium whitespace-nowrap"
               >
                 New Inspection
-              </button>
+              </motion.button>
             )}
           </div>
         </header>
@@ -447,10 +480,10 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, y: 10, scale: 0.992 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.992 }}
+              transition={SPRING_PANEL}
             >
               {activeTab === 'overview' && (
                 <OverviewView
@@ -477,6 +510,7 @@ export default function App() {
               {activeTab === 'templates' && (
                 <GoldenTemplatesView
                   templates={templates}
+                  onTemplatesChange={setTemplates}
                   onRefresh={refreshAllData}
                   onNotify={notify}
                 />
@@ -502,6 +536,7 @@ export default function App() {
                   onDisconnectSerial={handleDisconnectSerial}
                   onSimulateTrigger={handleSimulateTrigger}
                   onSendTestSignal={handleSendTestSignal}
+                  onClearEvents={handleClearHardwareEvents}
                 />
               )}
             </motion.div>
@@ -527,21 +562,22 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 text-xs font-medium shadow-md ${
+            className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-medium ${
               toast.tone === 'error'
-                ? 'border-red-200 bg-red-50 text-red-900'
-                : 'border-slate-200 bg-white text-slate-900'
+                ? 'border border-red-200 bg-red-50/95 text-red-900 backdrop-blur-md shadow-lg'
+                : 'glass-panel text-slate-900'
             }`}
           >
             <span>{toast.message}</span>
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => setToast(null)}
               aria-label="Dismiss notification"
-              className="text-slate-400 hover:text-slate-700"
+              className="text-slate-400 hover:text-[#0b1736]"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>

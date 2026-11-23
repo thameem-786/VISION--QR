@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, Trash2, X, XCircle } from 'lucide-react';
 import type { GoldenTemplate, InspectionRecord } from '../types/vision.ts';
+import { BUTTON_SPRING_PROPS } from '../utils/motionPresets.ts';
 
 interface InspectionDetailDrawerProps {
   record: InspectionRecord | null;
@@ -40,12 +41,13 @@ export function InspectionDetailDrawer({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="relative flex h-full w-full max-w-2xl flex-col border-l border-slate-200 bg-white"
+            className="glass-panel relative flex h-full w-full max-w-2xl flex-col border-l border-blue-950/15"
           >
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div className="navy-accent-bar h-[3px] w-full shrink-0" />
+        <div className="flex items-center justify-between border-b border-blue-950/12 px-6 py-4">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <h2 className="truncate text-lg font-semibold text-slate-900">
+              <h2 className="truncate text-lg font-bold text-[#0b1736]">
                 Inspection Record
               </h2>
               <span
@@ -67,23 +69,25 @@ export function InspectionDetailDrawer({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {onDelete && (
-              <button
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={() => onDelete(record.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 whitespace-nowrap"
+                className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 whitespace-nowrap"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete
-              </button>
+              </motion.button>
             )}
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={onClose}
               aria-label="Close detail drawer"
-              className="rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              className="white-glass-btn rounded-lg p-2 text-slate-600 hover:text-[#0b1736]"
             >
               <X className="h-4 w-4" />
-            </button>
+            </motion.button>
           </div>
         </div>
 

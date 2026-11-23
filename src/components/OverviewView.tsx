@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Camera, FileSpreadsheet } from 'lucide-react';
 import type { InspectionRecord, MetricsSummary, ViewTab } from '../types/vision.ts';
-import { BubbleField } from './BubbleField.tsx';
+import { BUTTON_SPRING_PROPS, SPRING_INTERACTIVE, SPRING_PANEL } from '../utils/motionPresets.ts';
 
 interface OverviewViewProps {
   metrics: MetricsSummary;
@@ -79,15 +79,16 @@ export function OverviewView({
             animate={{ opacity: 1, y: 0 }}
             whileHover={{ y: -2 }}
             transition={{
-              duration: 0.2,
-              delay: idx * 0.03,
+              duration: 0.22,
+              delay: idx * 0.035,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className="relative overflow-hidden rounded-xl border border-slate-200 bg-white/95 px-5 py-4 backdrop-blur-xs transition-shadow hover:shadow-sm"
+            className="glass-card relative overflow-hidden rounded-xl px-5 py-4 transition-shadow"
           >
-            <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
+            <div className="navy-accent-bar absolute inset-x-0 top-0 h-[2px] opacity-80" />
+            <p className="text-xs font-medium text-slate-600">{kpi.label}</p>
             {loading ? (
-              <div className="mt-2 h-8 w-24 animate-pulse rounded bg-slate-100" />
+              <div className="mt-2 h-8 w-24 animate-pulse rounded bg-blue-950/10" />
             ) : (
               <p className={`mt-1.5 font-mono text-2xl font-semibold tabular-nums ${kpi.tone}`}>
                 {kpi.value}
@@ -103,14 +104,11 @@ export function OverviewView({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
-        className="relative overflow-hidden rounded-xl border border-slate-200 bg-white/95 p-6 backdrop-blur-xs"
+        className="glass-panel relative overflow-hidden rounded-xl p-6"
       >
-        {metrics.trend.length === 0 && (
-          <BubbleField variant="ambient" tone="blue" count={8} className="opacity-55" />
-        )}
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-blue-950/12 pb-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Inspection Trend</h2>
+            <h2 className="text-base font-bold text-[#0b1736]">Inspection Trend</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Chronological OK vs. NG inspection counts across recent intervals
             </p>
@@ -136,14 +134,15 @@ export function OverviewView({
               Run your first webcam scan, upload a product label, or generate a synthetic test label
               in Live Inspection to populate trend analytics.
             </p>
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => onNavigate('live')}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-slate-800 whitespace-nowrap"
+              className="navy-glass-btn mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium whitespace-nowrap"
             >
               <Camera className="h-3.5 w-3.5" />
               Open Live Inspection
-            </button>
+            </motion.button>
           </div>
         ) : (
           <div className="mt-5">
@@ -207,7 +206,11 @@ export function OverviewView({
                       />
                       {/* OK segment (bottom) */}
                       {bucket.okCount > 0 && (
-                        <rect
+                        <motion.rect
+                          initial={{ opacity: 0, scaleY: 0 }}
+                          animate={{ opacity: 1, scaleY: 1 }}
+                          transition={{ ...SPRING_INTERACTIVE, delay: idx * 0.03 }}
+                          style={{ transformOrigin: `${cx}px 170px` }}
                           x={cx - barWidth / 2}
                           y={170 - okH}
                           width={barWidth}
@@ -218,7 +221,11 @@ export function OverviewView({
                       )}
                       {/* NG segment (stacked top) */}
                       {bucket.ngCount > 0 && (
-                        <rect
+                        <motion.rect
+                          initial={{ opacity: 0, scaleY: 0 }}
+                          animate={{ opacity: 1, scaleY: 1 }}
+                          transition={{ ...SPRING_INTERACTIVE, delay: idx * 0.03 + 0.04 }}
+                          style={{ transformOrigin: `${cx}px 170px` }}
                           x={cx - barWidth / 2}
                           y={170 - totalH}
                           width={barWidth}
@@ -254,39 +261,46 @@ export function OverviewView({
       </motion.section>
 
       {/* Recent Inspections Table */}
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...SPRING_PANEL, delay: 0.18 }}
+        className="glass-panel rounded-xl overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-950/12 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Recent Inspections</h2>
+            <h2 className="text-base font-bold text-[#0b1736]">Recent Inspections</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Latest label verification events saved to the station database
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <a
+            <motion.a
+              {...BUTTON_SPRING_PROPS}
               href="/api/inspections/export/csv"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+              className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Export CSV
-            </a>
-            <button
+            </motion.a>
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => onNavigate('history')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+              className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
             >
               View All
               <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            </motion.button>
           </div>
         </div>
 
         {loading ? (
-          <div className="divide-y divide-slate-100 px-6 py-2">
+          <div className="divide-y divide-blue-950/10 px-6 py-2">
             {[1, 2, 3].map((n) => (
               <div key={n} className="flex items-center justify-between py-3">
-                <div className="h-4 w-48 animate-pulse rounded bg-slate-100" />
-                <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
+                <div className="h-4 w-48 animate-pulse rounded bg-blue-950/10" />
+                <div className="h-4 w-24 animate-pulse rounded bg-blue-950/10" />
               </div>
             ))}
           </div>
@@ -298,7 +312,7 @@ export function OverviewView({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-500">
+                <tr className="border-b border-blue-950/12 bg-blue-950/[0.04] text-xs font-medium text-slate-600">
                   <th className="px-6 py-2.5">Timestamp</th>
                   <th className="px-4 py-2.5">Template</th>
                   <th className="px-4 py-2.5">QR Payload</th>
@@ -307,12 +321,15 @@ export function OverviewView({
                   <th className="px-6 py-2.5 text-right">Verdict</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentInspections.slice(0, 6).map((row) => (
-                  <tr
+              <tbody className="divide-y divide-blue-950/10">
+                {recentInspections.slice(0, 6).map((row, idx) => (
+                  <motion.tr
                     key={row.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18, delay: idx * 0.025 }}
                     onClick={() => onSelectInspection(row)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                    className="cursor-pointer transition-colors hover:bg-white/80"
                   >
                     <td className="px-6 py-2.5 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
                       {new Date(row.createdAt).toLocaleTimeString([], {
@@ -338,13 +355,13 @@ export function OverviewView({
                         {row.verdict}
                       </span>
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </section>
+      </motion.section>
     </div>
   );
 }

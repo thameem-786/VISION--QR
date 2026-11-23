@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import { FileSpreadsheet, Search, Trash2 } from 'lucide-react';
 import type { InspectionRecord, ViewTab } from '../types/vision.ts';
+import { BUTTON_SPRING_PROPS, SPRING_PANEL } from '../utils/motionPresets.ts';
 
 interface InspectionHistoryViewProps {
   inspections: InspectionRecord[];
@@ -20,15 +22,25 @@ export function InspectionHistoryView({
   onNavigate,
 }: InspectionHistoryViewProps) {
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [verdictFilter, setVerdictFilter] = useState<'ALL' | 'OK' | 'NG'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
   const [confirmClear, setConfirmClear] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
+
     return inspections.filter((item) => {
       if (verdictFilter !== 'ALL' && item.verdict !== verdictFilter) return false;
       if (sourceFilter !== 'ALL' && item.sourceType !== sourceFilter) return false;
+      if (fromTime !== null || toTime !== null) {
+        const createdMs = new Date(item.createdAt).getTime();
+        if (fromTime !== null && createdMs < fromTime) return false;
+        if (toTime !== null && createdMs > toTime) return false;
+      }
       if (!q) return true;
       return (
         item.qrPayload.toLowerCase().includes(q) ||
@@ -37,54 +49,100 @@ export function InspectionHistoryView({
         item.summary.toLowerCase().includes(q)
       );
     });
-  }, [inspections, search, verdictFilter, sourceFilter]);
+  }, [inspections, search, dateFrom, dateTo, verdictFilter, sourceFilter]);
 
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (verdictFilter !== 'ALL') params.set('verdict', verdictFilter);
     if (sourceFilter !== 'ALL') params.set('source', sourceFilter);
     if (search.trim()) params.set('search', search.trim());
+    if (dateFrom) params.set('from', new Date(`${dateFrom}T00:00:00`).toISOString());
+    if (dateTo) params.set('to', new Date(`${dateTo}T23:59:59.999`).toISOString());
     const qs = params.toString();
     return `/api/inspections/export/csv${qs ? `?${qs}` : ''}`;
-  }, [verdictFilter, sourceFilter, search]);
+  }, [verdictFilter, sourceFilter, search, dateFrom, dateTo]);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white">
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING_PANEL}
+      className="glass-panel rounded-xl overflow-hidden"
+    >
       {/* Filter & Export Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-blue-950/12 px-6 py-4">
         <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[260px]">
-          <div className="relative flex-1 max-w-xs">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search QR, template, OCR text..."
-              className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-slate-900"
+              className="w-full rounded-lg border border-blue-950/15 bg-white/90 py-1.5 pl-8 pr-3 text-xs text-[#0b1736] outline-none focus:border-blue-800"
             />
           </div>
 
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <label className="text-[11px] font-medium text-slate-500" htmlFor="history-date-from">
+              From
+            </label>
+            <input
+              id="history-date-from"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="From date"
+              className="rounded-lg border border-blue-950/15 bg-white/90 px-2.5 py-1.5 font-mono text-xs text-[#0b1736] outline-none focus:border-blue-800"
+            />
+            <label className="text-[11px] font-medium text-slate-500" htmlFor="history-date-to">
+              To
+            </label>
+            <input
+              id="history-date-to"
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="To date"
+              className="rounded-lg border border-blue-950/15 bg-white/90 px-2.5 py-1.5 font-mono text-xs text-[#0b1736] outline-none focus:border-blue-800"
+            />
+            {(dateFrom || dateTo) && (
+              <motion.button
+                type="button"
+                {...BUTTON_SPRING_PROPS}
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="white-glass-btn rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-slate-600 whitespace-nowrap"
+              >
+                Reset dates
+              </motion.button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg bg-blue-950/[0.06] p-1">
             {(['ALL', 'OK', 'NG'] as const).map((v) => (
-              <button
+              <motion.button
                 key={v}
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={() => setVerdictFilter(v)}
                 className={`rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                   verdictFilter === v
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'navy-glass-btn text-white'
+                    : 'text-slate-700 hover:text-blue-900'
                 }`}
               >
                 {v === 'ALL' ? 'All' : v}
-              </button>
+              </motion.button>
             ))}
           </div>
 
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 outline-none focus:border-slate-900"
+            className="rounded-lg border border-blue-950/15 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 outline-none focus:border-blue-800"
           >
             <option value="ALL">All Sources</option>
             <option value="webcam">Webcam</option>
@@ -95,29 +153,32 @@ export function InspectionHistoryView({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <a
+          <motion.a
+            {...BUTTON_SPRING_PROPS}
             href={exportUrl}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+            className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
             Export CSV
-          </a>
+          </motion.a>
 
           {inspections.length > 0 && !confirmClear && (
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => setConfirmClear(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 whitespace-nowrap"
+              className="white-glass-btn inline-flex items-center gap-1.5 rounded-lg border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 whitespace-nowrap"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Clear Log
-            </button>
+            </motion.button>
           )}
 
           {confirmClear && (
             <div className="flex items-center gap-1.5">
-              <button
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={async () => {
                   await onClearAll();
                   setConfirmClear(false);
@@ -125,31 +186,32 @@ export function InspectionHistoryView({
                 className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 whitespace-nowrap"
               >
                 Confirm Clear
-              </button>
-              <button
+              </motion.button>
+              <motion.button
                 type="button"
+                {...BUTTON_SPRING_PROPS}
                 onClick={() => setConfirmClear(false)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+                className="white-glass-btn rounded-lg px-3 py-2 text-xs font-medium whitespace-nowrap"
               >
                 Cancel
-              </button>
+              </motion.button>
             </div>
           )}
         </div>
       </div>
 
       {loading ? (
-        <div className="divide-y divide-slate-100 px-6 py-4">
+        <div className="divide-y divide-blue-950/10 px-6 py-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex items-center justify-between py-3">
-              <div className="h-4 w-56 animate-pulse rounded bg-slate-100" />
-              <div className="h-4 w-28 animate-pulse rounded bg-slate-100" />
+              <div className="h-4 w-56 animate-pulse rounded bg-blue-950/10" />
+              <div className="h-4 w-28 animate-pulse rounded bg-blue-950/10" />
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="px-6 py-14 text-center">
-          <p className="text-sm font-medium text-slate-900">
+          <p className="text-sm font-medium text-[#0b1736]">
             {inspections.length === 0
               ? 'No inspection history recorded'
               : 'No records match your filters'}
@@ -160,21 +222,23 @@ export function InspectionHistoryView({
               : 'Try clearing the search query or switching the verdict filter.'}
           </p>
           {inspections.length === 0 && (
-            <button
+            <motion.button
               type="button"
+              {...BUTTON_SPRING_PROPS}
               onClick={() => onNavigate('live')}
-              className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800"
+              className="navy-glass-btn mt-4 rounded-lg px-4 py-2 text-xs font-medium"
             >
               Start Inspecting
-            </button>
+            </motion.button>
           )}
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-500">
-                <th className="px-6 py-2.5">Date & Time</th>
+              <tr className="border-b border-blue-950/12 bg-blue-950/[0.04] text-xs font-medium text-slate-600">
+                <th className="px-6 py-2.5">Preview</th>
+                <th className="px-4 py-2.5">Date & Time</th>
                 <th className="px-4 py-2.5">Template</th>
                 <th className="px-4 py-2.5">Source</th>
                 <th className="px-4 py-2.5">QR Payload</th>
@@ -185,14 +249,31 @@ export function InspectionHistoryView({
                 <th className="px-6 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((row) => (
-                <tr
+            <tbody className="divide-y divide-blue-950/10">
+              {filtered.map((row, idx) => (
+                <motion.tr
                   key={row.id}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.16, delay: Math.min(idx * 0.015, 0.2) }}
                   onClick={() => onSelectInspection(row)}
-                  className="cursor-pointer transition-colors hover:bg-slate-50"
+                  className="cursor-pointer transition-colors hover:bg-white/80"
                 >
-                  <td className="px-6 py-2.5 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
+                  <td className="px-6 py-2">
+                    <div className="flex h-9 w-14 items-center justify-center overflow-hidden rounded border border-blue-950/15 bg-white">
+                      {row.imageData ? (
+                        <img
+                          src={row.imageData}
+                          alt={`${row.templateName} capture`}
+                          referrerPolicy="no-referrer"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">No img</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
                     {new Date(row.createdAt).toLocaleString([], {
                       month: 'short',
                       day: 'numeric',
@@ -230,21 +311,22 @@ export function InspectionHistoryView({
                     className="px-6 py-2.5 text-right whitespace-nowrap"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button
+                    <motion.button
                       type="button"
+                      {...BUTTON_SPRING_PROPS}
                       onClick={() => onDeleteInspection(row.id)}
                       aria-label={`Delete record ${row.id}`}
                       className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-700"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </motion.button>
                   </td>
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-    </section>
+    </motion.section>
   );
 }

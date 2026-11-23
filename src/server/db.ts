@@ -373,6 +373,8 @@ export interface ListInspectionsOptions {
   verdict?: string;
   source?: string;
   search?: string;
+  from?: string;
+  to?: string;
   limit?: number;
 }
 
@@ -392,6 +394,14 @@ export function listInspections(opts: ListInspectionsOptions = {}): InspectionRe
   ) {
     clauses.push('source_type = ?');
     params.push(opts.source);
+  }
+  if (opts.from && !Number.isNaN(Date.parse(opts.from))) {
+    clauses.push('created_at >= ?');
+    params.push(new Date(opts.from).toISOString());
+  }
+  if (opts.to && !Number.isNaN(Date.parse(opts.to))) {
+    clauses.push('created_at <= ?');
+    params.push(new Date(opts.to).toISOString());
   }
   if (opts.search && opts.search.trim().length > 0) {
     const q = `%${opts.search.trim().toLowerCase()}%`;
@@ -508,4 +518,9 @@ export function listHardwareEvents(limit = 50): HardwareEvent[] {
     .prepare('SELECT * FROM hardware_events ORDER BY created_at DESC LIMIT ?')
     .all(Math.min(Math.max(limit, 1), 200)) as unknown as RawHardwareEventRow[];
   return rows.map(mapHardwareEvent);
+}
+
+export function clearHardwareEvents(): number {
+  const result = db.prepare('DELETE FROM hardware_events').run();
+  return Number(result.changes);
 }

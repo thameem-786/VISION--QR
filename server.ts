@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   activateTemplate,
+  clearHardwareEvents,
   clearInspections,
   createTemplate,
   deleteInspection,
@@ -40,16 +41,19 @@ const hardwareRuntime = {
   rssi: null as number | null,
   pendingTriggerId: 0,
   lastTriggerAt: null as string | null,
-  pendingCommand: 'IDLE' as 'OK' | 'NG' | 'IDLE',
+  pendingCommand: 'NONE' as 'OK' | 'NG' | 'NONE',
   pendingCommandAt: null as string | null,
 };
 
-function getHardwareStatus(): HardwareStatusResponse {
-  const now = Date.now();
+function isHttpEsp32Connected(): boolean {
   const hbMs = hardwareRuntime.lastHeartbeatAt
     ? new Date(hardwareRuntime.lastHeartbeatAt).getTime()
     : 0;
-  const httpConnected = hbMs > 0 && now - hbMs < 20_000;
+  return hbMs > 0 && Date.now() - hbMs < 20_000;
+}
+
+function getHardwareStatus(): HardwareStatusResponse {
+  const httpConnected = isHttpEsp32Connected();
 
   return {
     httpConnected,
@@ -59,8 +63,8 @@ function getHardwareStatus(): HardwareStatusResponse {
     rssi: hardwareRuntime.rssi,
     pendingTriggerId: hardwareRuntime.pendingTriggerId,
     lastTriggerAt: hardwareRuntime.lastTriggerAt,
-    pendingCommand: hardwareRuntime.pendingCommand,
-    pendingCommandAt: hardwareRuntime.pendingCommandAt,
+    pendingCommand: httpConnected ? hardwareRuntime.pendingCommand : 'NONE',
+    pendingCommandAt: httpConnected ? hardwareRuntime.pendingCommandAt : null,
     events: listHardwareEvents(40),
   };
 }
@@ -211,10 +215,12 @@ async function startServer() {
     const verdict = typeof req.query.verdict === 'string' ? req.query.verdict : undefined;
     const source = typeof req.query.source === 'string' ? req.query.source : undefined;
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
     const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 200;
 
     res.json({
-      inspections: listInspections({ verdict, source, search, limit }),
+      inspections: listInspections({ verdict, source, search, from, to, limit }),
     });
   });
 
@@ -283,14 +289,16 @@ async function startServer() {
         imageData: imageDataUrl,
       });
 
-      // Queue signal for optional ESP32 hardware bridge
-      hardwareRuntime.pendingCommand = verdict;
-      hardwareRuntime.pendingCommandAt = new Date().toISOString();
-      insertHardwareEvent(
-        'http_bridge',
-        verdict === 'OK' ? 'signal_ok' : 'signal_ng',
-        `Inspection ${record.id} -> ${verdict} (${cycleTimeMs} ms)`
-      );
+      // Queue signal only if an ESP32 HTTP bridge device is actively connected
+      if (isHttpEsp32Connected()) {
+        hardwareRuntime.pendingCommand = verdict;
+        hardwareRuntime.pendingCommandAt = new Date().toISOString();
+        insertHardwareEvent(
+          'http_bridge',
+          verdict === 'OK' ? 'signal_ok' : 'signal_ng',
+          `Inspection ${record.id} -> ${verdict} (${cycleTimeMs} ms)`
+        );
+      }
 
       res.status(201).json({ inspection: record });
     } catch (err) {
@@ -317,7 +325,9 @@ async function startServer() {
     const verdict = typeof req.query.verdict === 'string' ? req.query.verdict : undefined;
     const source = typeof req.query.source === 'string' ? req.query.source : undefined;
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
-    const records = listInspections({ verdict, source, search, limit: 1000 });
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    const records = listInspections({ verdict, source, search, from, to, limit: 1000 });
 
     const headers = [
       'ID',
@@ -424,8 +434,8 @@ async function startServer() {
     hardwareRuntime.lastHeartbeatAt = now;
     const ack = req.query.ack === '1' || req.query.ack === 'true';
     const command = hardwareRuntime.pendingCommand;
-    if (ack && command !== 'IDLE') {
-      hardwareRuntime.pendingCommand = 'IDLE';
+    if (ack && command !== 'NONE') {
+      hardwareRuntime.pendingCommand = 'NONE';
     }
     res.json({
       command,
@@ -438,8 +448,10 @@ async function startServer() {
     const signal = req.body?.signal === 'OK' ? 'OK' : 'NG';
     const channel = req.body?.channel === 'web_serial' ? 'web_serial' : 'manual_test';
     const now = new Date().toISOString();
-    hardwareRuntime.pendingCommand = signal;
-    hardwareRuntime.pendingCommandAt = now;
+    if (isHttpEsp32Connected()) {
+      hardwareRuntime.pendingCommand = signal;
+      hardwareRuntime.pendingCommandAt = now;
+    }
 
     const event = insertHardwareEvent(
       channel,
@@ -447,6 +459,13 @@ async function startServer() {
       `Manual ${signal} test signal dispatched to hardware output`
     );
     res.json({ ok: true, command: signal, event });
+  });
+
+  app.delete('/api/hardware/events', (_req: Request, res: Response) => {
+    const cleared = clearHardwareEvents();
+    hardwareRuntime.pendingCommand = 'NONE';
+    hardwareRuntime.pendingCommandAt = null;
+    res.json({ cleared });
   });
 
   app.post('/api/hardware/event', (req: Request, res: Response) => {
